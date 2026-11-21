@@ -48,8 +48,9 @@ _Decision pending: which shape?_
 - [ ] Mode picker that scales beyond a dropdown (cards on the home screen)
 
 ### Next (a few weeks)
-- [ ] **Set Builder page** — your own custom sets as share links
-- [ ] More composer modes via Apple previews: Mozart, Haydn, Schubert, Chopin, Tchaikovsky, Dvořák, Shostakovich
+- [x] **Set Builder page** — your own custom sets as share links (Nov 2026: chamber / solo piano / orchestral × 6 composers, 6 or 10 works, historical moments with Japanese text)
+- [x] Schubert, Mendelssohn, Schumann, Dvořák added via the Set Builder library (132 works)
+- [ ] More composers: Mozart, Haydn, Chopin, Tchaikovsky, Shostakovich
 - [ ] Difficulty label for each mode; new modes join the Daily rotation
 - [ ] iPad home-screen install (opens full-screen like an app)
 - [ ] Link-preview image for sharing in Messages

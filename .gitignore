@@ -2,3 +2,5 @@
 .claude/
 .netlify/
 site/.netlify/
+__pycache__/
+tools/*.log

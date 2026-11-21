@@ -1,7 +1,8 @@
 'use strict';
 const catalog = window.CATALOG;
 const orchCatalog = window.CATALOG_ORCH;
-const catalogs = { [catalog.version]: catalog, [orchCatalog.version]: orchCatalog };
+const libCatalog = window.CATALOG_LIB;
+const catalogs = { [catalog.version]: catalog, [orchCatalog.version]: orchCatalog, [libCatalog.version]: libCatalog };
 // Each excerpt remembers which catalogue it came from (work ids can repeat across catalogues).
 for (const c of Object.values(catalogs)) for (const e of c.excerpts) Object.defineProperty(e, '_cat', { value: c });
 const allExcerpts = Object.values(catalogs).flatMap(c => c.excerpts);
@@ -12,8 +13,13 @@ const CLIP = 25, HEARD_AFTER = 5;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const letter = (d, id) => String.fromCharCode(65 + d.initialOrder.indexOf(id));
-const composerOf = id => catalog.composers.find(c => c.id === id);
+const composerOf = id => libCatalog.composers.find(c => c.id === id) || catalog.composers.find(c => c.id === id);
 const workOf = e => e._cat.works.find(w => w.id === e.workId);
+const isEvent = e => e.provider === 'event';
+const COLORS = { beethoven: '#8fb8de', brahms: '#e5c382', schubert: '#c9a0e6', mendelssohn: '#6fd0c8', schumann: '#f2a283', dvorak: '#e58fb4', event: '#d8d2c4' };
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const totalPairs = n => n * (n - 1) / 2;
+const musicIds = d => resolveExcerpts(catOf(d), d).filter(e => !isEvent(e)).map(e => e.id);
 
 /* ---------- storage ---------- */
 let state = emptyCollection();
@@ -21,8 +27,14 @@ let extras = { results: {}, challenges: {}, name: '' };
 try { state = restoreCollection(JSON.parse(localStorage.getItem(KEY) || 'null'), catalogs); } catch {}
 try {
   const x = JSON.parse(localStorage.getItem(XKEY) || 'null');
-  if (x && typeof x === 'object') extras = { results: x.results || {}, challenges: x.challenges || {}, name: typeof x.name === 'string' ? x.name : '', home: x.home === 'orchestral' ? 'orchestral' : undefined };
+  if (x && typeof x === 'object') extras = { results: x.results || {}, challenges: x.challenges || {}, name: typeof x.name === 'string' ? x.name : '', home: x.home === 'orchestral' ? 'orchestral' : undefined, builder: validBuild(x.builder) };
 } catch {}
+function validBuild(b) {
+  if (!b || typeof b !== 'object') return undefined;
+  const ens = Array.isArray(b.ensembles) ? b.ensembles.filter(x => ['chamber', 'piano', 'orchestral'].includes(x)) : [];
+  const comps = Array.isArray(b.composers) ? b.composers.filter(x => libCatalog.composers.some(c => c.id === x)) : [];
+  return { ensembles: ens, composers: comps, size: b.size === 10 ? 10 : 6, moments: b.moments !== false };
+}
 const firstVisit = !state.definitions.length;
 function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); localStorage.setItem(XKEY, JSON.stringify(extras)); }
@@ -113,7 +125,7 @@ function orchestralDefinition() {
 function correctOrder(d) {
   return resolveExcerpts(catOf(d), d).sort((a, b) => workOf(a).year - workOf(b).year).map(e => e.id);
 }
-function modeName(m) { return m.kind === 'mixed' ? 'Mixed' : m.kind === 'orchestral' ? 'Orchestral' : composerOf(m.composerId).name; }
+function modeName(m) { return m.kind === 'mixed' ? 'Mixed' : m.kind === 'orchestral' ? 'Orchestral' : m.kind === 'custom' ? 'Custom' : composerOf(m.composerId).name; }
 
 /* ---------- audio ---------- */
 const audios = new Map();
@@ -216,17 +228,18 @@ function markHeard(id) {
 function paintProgress() {
   const g = game();
   if (g.submitted) { $('progress').innerHTML = ''; return; }
-  const n = g.heard.length;
-  $('progress').innerHTML = active.initialOrder.map(id => '<span class="pip' + (g.heard.includes(id) ? ' on' : '') + '"></span>').join('') +
-    '<span>&nbsp;Heard ' + n + ' of 6' + (n === 6 ? ' — ready when you are' : '') + '</span>';
+  const ids = musicIds(active), n = ids.filter(id => g.heard.includes(id)).length;
+  $('progress').innerHTML = ids.map(id => '<span class="pip' + (g.heard.includes(id) ? ' on' : '') + '"></span>').join('') +
+    '<span>&nbsp;Heard ' + n + ' of ' + ids.length + (n === ids.length ? ' — ready when you are' : '') + '</span>';
 }
 function verdictFor(g, correct, id) {
   const diff = Math.abs(g.order.indexOf(id) - correct.indexOf(id));
   return { diff, guess: g.order.indexOf(id) + 1 };
 }
 function square(diff) { return diff === 0 ? '🟩' : diff === 1 ? '🟨' : '⬜'; }
-function rating(p) {
-  return p === 15 ? 'Flawless chronology' : p >= 13 ? 'Seasoned listener' : p >= 10 ? 'Good ears' : p >= 7 ? 'Finding the thread' : 'Lost in time';
+function rating(p, total = 15) {
+  const f = p / total;
+  return f === 1 ? 'Flawless chronology' : f >= 0.85 ? 'Seasoned listener' : f >= 0.66 ? 'Good ears' : f >= 0.46 ? 'Finding the thread' : 'Lost in time';
 }
 const playBtn = (id, label) =>
   '<button class="play" data-play="' + esc(id) + '" data-label="' + esc(label) + '" aria-label="Play ' + esc(label) + '">' +
@@ -241,24 +254,42 @@ function render() {
   const correct = correctOrder(d);
   const isDaily = !!day;
 
+  const custom = d.mode.kind === 'custom';
+  showView('game');
   $('tab-daily').setAttribute('aria-pressed', String(isDaily));
-  $('tab-practice').setAttribute('aria-pressed', String(!isDaily));
-  $('practice-bar').hidden = isDaily;
+  $('tab-practice').setAttribute('aria-pressed', String(!isDaily && !custom));
+  $('tab-build').setAttribute('aria-pressed', String(custom));
+  $('practice-bar').hidden = isDaily || custom;
+  $('custom-bar').hidden = !custom;
+  $('c-again').textContent = extras.builder ? 'New set, same settings' : 'Build your own set';
+  $('c-change').hidden = !extras.builder;
+  const n = d.initialOrder.length, total = totalPairs(n);
+  const music = es.filter(e => !isEvent(e)), moments = es.length - music.length;
 
   const orch = d.mode.kind === 'orchestral';
+  if (custom) {
+    const names = [...new Set(music.map(e => workOf(e).composerId))].map(id => composerOf(id).name);
+    const ens = [...new Set(music.map(e => workOf(e).ensemble))].map(x => ({ chamber: 'Chamber music', piano: 'Solo piano', orchestral: 'Orchestral' })[x]);
+    $('composer').textContent = 'Custom set · ' + names.join(', ') + ' · ' + ens.join(', ');
+    $('headline').innerHTML = 'Your own set,<em>in ' + (NUMBER_WORDS[music.length] || music.length) + ' listens.</em>';
+    $('intro').textContent = cap(NUMBER_WORDS[music.length] || music.length) + ' excerpts' + (moments ? ', plus ' + NUMBER_WORDS[moments] + ' historical moment' + (moments > 1 ? 's' : '') : '') +
+      '. Listen, put everything in the order it happened — earliest at the top — then discover the stories behind it.';
+  } else {
+  $('headline').innerHTML = 'A lifetime,<em>in six listens.</em>';
   $('composer').textContent = (isDaily ? 'Daily #' + day + ' · ' : '') + (orch ? 'Orchestral · Beethoven & Brahms' : d.mode.kind === 'mixed' ? 'Beethoven & Brahms, mixed' : composerOf(d.mode.composerId).fullName);
   $('intro').textContent = orch
     ? 'Six orchestral excerpts — three by Beethoven, three by Brahms. Listen, put them in the order they were written, then discover the works behind the sound.'
     : d.mode.kind === 'mixed'
     ? 'Two composers, six anonymous excerpts. Put them on one timeline, earliest at the top.'
     : 'Six moments from an early, middle and late career. Listen, put them in the order they were written, then discover the works behind the sound.';
+  }
 
   if (!isDaily) {
     const practice = state.definitions.filter(x => !dayOf(x));
     $('saved').innerHTML = practice.map((x, i) => {
       const r = extras.results[x.id];
       return '<option value="' + esc(x.id) + '"' + (x.id === d.id ? ' selected' : '') + '>' +
-        esc(modeName(x.mode) + ' · Set ' + (i + 1) + (r ? ' · ' + r.pairs + '/15' : '') + (extras.challenges[x.id] ? ' · challenge' : '')) + '</option>';
+        esc(modeName(x.mode) + ' · Set ' + (i + 1) + (r ? ' · ' + r.pairs + '/' + (r.total || 15) : '') + (extras.challenges[x.id] ? ' · challenge' : '')) + '</option>';
     }).reverse().join('');
   }
 
@@ -267,7 +298,7 @@ function render() {
   if (ch && !g.submitted) {
     $('challenge').hidden = false;
     $('challenge').innerHTML = '<b>' + esc(ch.from || 'A friend') + '</b> ' + (Number.isInteger(ch.score) ? 'challenged you to this set' : 'sent you this set — enjoy the listening!') +
-      (Number.isInteger(ch.score) ? ' and scored <b>' + ch.score + '/15</b>. Can you beat it?' : '');
+      (Number.isInteger(ch.score) ? ' and scored <b>' + ch.score + '/' + total + '</b>. Can you beat it?' : '');
   } else $('challenge').hidden = true;
 
   paintProgress();
@@ -285,25 +316,37 @@ function render() {
     }
     sc.hidden = false;
     sc.innerHTML =
-      '<div class="score-big">' + r.pairs + '<small> / 15 pairs in order</small></div>' +
-      '<div class="rating">' + rating(r.pairs) + '</div>' +
+      '<div class="score-big">' + r.pairs + '<small> / ' + total + ' pairs in order</small></div>' +
+      '<div class="rating">' + rating(r.pairs, total) + '</div>' +
       '<div class="squares" aria-label="Accuracy for each work in chronological order">' + squares + '</div>' +
-      '<p class="sub">' + r.exact + ' of 6 in exactly the right spot · 🟩 exact · 🟨 one off · ⬜ further' +
-      (first && (first.pairs !== r.pairs) ? ' · first try: ' + first.pairs + '/15' : '') + '</p>' + vs +
+      '<p class="sub">' + r.exact + ' of ' + n + ' in exactly the right spot · 🟩 exact · 🟨 one off · ⬜ further' +
+      (first && (first.pairs !== r.pairs) ? ' · first try: ' + first.pairs + '/' + total : '') + '</p>' + vs +
       timelineSvg(correct.map(id => ({ e: byId.get(id), w: workOf(byId.get(id)) })), d) +
       compareSvg(g.order, correct, d) +
       '<div class="row"><button class="primary" id="share-result">Share my score</button>' +
-      (isDaily ? '<button id="go-practice">Play a practice set</button>' : '<button id="next-practice">Next set →</button>') + '</div>';
+      (isDaily ? '<button id="go-practice">Play a practice set</button>' : custom ? '<button id="next-custom">' + (extras.builder ? 'Another set, same settings →' : 'Build your own set →') + '</button>' : '<button id="next-practice">Next set →</button>') + '</div>';
     $('share-result').onclick = () => openShare(true);
     if ($('go-practice')) $('go-practice').onclick = goPractice;
     if ($('next-practice')) $('next-practice').onclick = newPractice;
+    if ($('next-custom')) $('next-custom').onclick = () => extras.builder ? buildAndPlay(extras.builder) : openBuilder();
   } else { sc.hidden = true; sc.innerHTML = ''; }
 
   // cards
   const order = g.submitted ? correct : g.order;
   $('cards').innerHTML = order.map((id, i) => {
-    const e = byId.get(id), w = workOf(e), L = letter(d, id), heard = g.heard.includes(id);
-    const label = g.submitted ? w.title : 'Excerpt ' + L;
+    const e = byId.get(id), w = workOf(e), L = letter(d, id), heard = g.heard.includes(id), ev = isEvent(e);
+    const label = g.submitted || ev ? w.title : 'Excerpt ' + L;
+    const ja = ev && w.titleJa ? '<p class="ja" lang="ja">' + esc(w.titleJa) + '</p>' : '';
+    if (!g.submitted && ev) {
+      return '<li class="card event" data-id="' + esc(id) + '"><div class="cardtop">' +
+        '<span class="handle" data-handle title="Drag to reorder" aria-hidden="true">⋮⋮</span>' +
+        '<span class="pos" aria-hidden="true">' + String(i + 1).padStart(2, '0') + '</span>' +
+        '<span class="badge event-badge" title="Historical moment">' + L + '</span>' +
+        '<div class="desc"><p class="kicker">Historical moment</p><h2>' + esc(w.title) + '</h2>' + ja + '</div></div>' +
+        '<div class="tools">' +
+        '<button data-move="' + esc(id) + '" data-at="' + (i - 1) + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move ' + esc(w.title) + ' earlier">↑ Earlier</button>' +
+        '<button data-move="' + esc(id) + '" data-at="' + (i + 1) + '"' + (i === n - 1 ? ' disabled' : '') + ' aria-label="Move ' + esc(w.title) + ' later">↓ Later</button></div></li>';
+    }
     if (!g.submitted) {
       const note = g.notesByExcerptId[id] || '';
       return '<li class="card" data-id="' + esc(id) + '"><div class="cardtop">' +
@@ -313,7 +356,7 @@ function render() {
         '<div class="desc"><h2>' + esc(label) + '</h2><p>' + esc(e.subtitle) + '</p></div>' + playBtn(id, label) + '</div>' +
         '<div class="tools">' +
         '<button data-move="' + esc(id) + '" data-at="' + (i - 1) + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move excerpt ' + L + ' earlier">↑ Earlier</button>' +
-        '<button data-move="' + esc(id) + '" data-at="' + (i + 1) + '"' + (i === 5 ? ' disabled' : '') + ' aria-label="Move excerpt ' + L + ' later">↓ Later</button>' +
+        '<button data-move="' + esc(id) + '" data-at="' + (i + 1) + '"' + (i === n - 1 ? ' disabled' : '') + ' aria-label="Move excerpt ' + L + ' later">↓ Later</button>' +
         '<button data-notes="' + esc(id) + '" aria-expanded="' + (!!note) + '">✎ Notes</button></div>' +
         '<textarea class="note" data-note="' + esc(id) + '" maxlength="500" placeholder="What do you hear? Youthful? Searching? Grand?" aria-label="Notes for excerpt ' + L + '"' + (note ? '' : ' hidden') + '>' + esc(note) + '</textarea></li>';
     }
@@ -321,13 +364,21 @@ function render() {
     const grade = v.diff === 0 ? 'exact' : v.diff === 1 ? 'near' : 'far';
     const vtxt = v.diff === 0 ? '✓ Spot on — you had it ' + ordinal(v.guess)
       : 'You had it ' + ordinal(v.guess) + ' — ' + v.diff + (v.diff === 1 ? ' place' : ' places') + ' off';
+    if (ev) {
+      return '<li class="card result event ' + grade + '" data-id="' + esc(id) + '"><div class="cardtop">' +
+        '<span class="pos">' + w.year + '</span>' +
+        '<span class="badge event-badge">' + L + '</span>' +
+        '<div class="desc"><p class="kicker">Historical moment</p><h2>' + esc(w.title) + '</h2>' + ja + '</div></div>' +
+        '<p class="outcome ' + grade + '">' + vtxt + '</p>' +
+        '<p class="story">' + esc(w.story) + '</p>' + (w.storyJa ? '<p class="story ja" lang="ja">' + esc(w.storyJa) + '</p>' : '') + '</li>';
+    }
     return '<li class="card result ' + grade + '" data-id="' + esc(id) + '"><div class="cardtop">' +
       '<span class="pos">' + w.year + '</span>' +
       '<span class="badge heard">' + L + '</span>' +
       '<div class="desc"><h2>' + esc(w.title) + '</h2><p>' + esc(composerOf(w.composerId).fullName + ' · ' + w.catalogue) + '</p></div>' + playBtn(id, w.title) + '</div>' +
       '<p class="outcome ' + grade + '">' + vtxt + '</p>' +
       '<div class="tools"><span class="verdict">' + esc(e.subtitle) + '</span></div>' +
-      '<h3>' + esc(w.chapter) + '</h3><p class="story">' + esc(w.story) + '</p>' +
+      (w.chapter ? '<h3>' + esc(w.chapter) + '</h3>' : '') + '<p class="story">' + esc(w.story) + '</p>' +
       (g.notesByExcerptId[id] ? '<p class="mynote">Your notes: ' + esc(g.notesByExcerptId[id]) + '</p>' : '') +
       (e.provider === 'apple'
         ? '<p class="credits">' + esc(e.performer) + ' · <a href="' + esc(e.trackViewUrl) + '" target="_blank" rel="noopener">Listen on Apple Music ↗</a></p></li>'
@@ -361,7 +412,7 @@ function compareSvg(order, correct, d) {
       '<circle cx="' + rx + '" cy="' + y(j) + '" r="14" fill="var(--panel2)" stroke="' + c + '" stroke-width="2"/><text class="cmp-l" x="' + rx + '" y="' + (y(j) + 5) + '" text-anchor="middle">' + L + '</text>';
   }).join('');
   const nums = order.map((_, i) => '<text x="' + (lx - 34) + '" y="' + (y(i) + 4) + '" text-anchor="end">' + ordinal(i + 1) + '</text><text x="' + (rx + 34) + '" y="' + (y(i) + 4) + '">' + ordinal(i + 1) + '</text>').join('');
-  return '<div class="compare"><svg viewBox="0 0 ' + W + ' ' + (top + 5 * row + 26) + '" role="img" aria-label="Your order compared with the real order">' +
+  return '<div class="compare"><svg viewBox="0 0 ' + W + ' ' + (top + (order.length - 1) * row + 26) + '" role="img" aria-label="Your order compared with the real order">' +
     '<text class="cmp-h" x="' + lx + '" y="18" text-anchor="middle">Your order</text><text class="cmp-h" x="' + rx + '" y="18" text-anchor="middle">Real order</text>' +
     nums + lines + '</svg><p class="sub">Straight lines are right · crossing lines show what you swapped</p></div>';
 }
@@ -370,20 +421,23 @@ function timelineSvg(items, d) {
   const lo = Math.min(...years) - 2, hi = Math.max(...years) + 2;
   const W = 760, x = y => 30 + (y - lo) / (hi - lo) * (W - 60);
   const mixed = d.mode.kind !== 'composer';
-  const colors = {}; catalog.composers.forEach((c, i) => colors[c.id] = i ? 'var(--b)' : 'var(--a)');
+  const colors = d.mode.kind === 'custom' ? COLORS : {};
+  if (d.mode.kind !== 'custom') catalog.composers.forEach((c, i) => colors[c.id] = i ? 'var(--b)' : 'var(--a)');
+  const keyOf = (e, w) => isEvent(e) ? 'event' : w.composerId;
   let lastX = -99, lift = 0;
   const marks = items.map(({ e, w }) => {
     const cx = x(w.year);
     lift = cx - lastX < 34 ? (lift ? 0 : 1) : 0; lastX = cx;
     const ty = lift ? 14 : 30, yy = lift ? 92 : 76;
-    const col = mixed ? colors[w.composerId] : 'var(--gold)';
+    const col = mixed ? colors[keyOf(e, w)] : 'var(--gold)';
     return '<line x1="' + cx + '" x2="' + cx + '" y1="' + (ty + 6) + '" y2="52" stroke="' + col + '" stroke-opacity=".5"/>' +
       '<circle cx="' + cx + '" cy="52" r="6" fill="' + col + '"/>' +
       '<text x="' + cx + '" y="' + ty + '" text-anchor="middle" style="fill:' + col + ';font:600 14px Georgia,serif">' + letter(d, e.id) + '</text>' +
       '<text class="yr" x="' + cx + '" y="' + yy + '" text-anchor="middle">' + w.year + '</text>';
   }).join('');
-  const legend = mixed ? catalog.composers.map((c, i) => '<circle cx="' + (40 + i * 130) + '" cy="116" r="5" fill="' + colors[c.id] + '"/><text x="' + (52 + i * 130) + '" y="120">' + esc(c.name) + '</text>').join('') : '';
-  return '<svg class="timeline" viewBox="0 0 ' + W + ' ' + (mixed ? 128 : 100) + '" role="img" aria-label="Timeline of the six works from ' + Math.min(...years) + ' to ' + Math.max(...years) + '">' +
+  const keys = [...new Set(items.map(({ e, w }) => keyOf(e, w)))].sort((a, b) => (a === 'event') - (b === 'event'));
+  const legend = mixed ? keys.map((k, i) => '<circle cx="' + (40 + i * 120) + '" cy="116" r="5" fill="' + colors[k] + '"/><text x="' + (52 + i * 120) + '" y="120">' + esc(k === 'event' ? 'History' : composerOf(k).name) + '</text>').join('') : '';
+  return '<svg class="timeline" viewBox="0 0 ' + W + ' ' + (mixed ? 128 : 100) + '" role="img" aria-label="Timeline from ' + Math.min(...years) + ' to ' + Math.max(...years) + '">' +
     '<line x1="20" x2="' + (W - 20) + '" y1="52" y2="52" stroke="var(--line2)" stroke-width="2"/>' + marks + legend + '</svg>';
 }
 
@@ -501,7 +555,7 @@ function endDrag() {
 
 function reveal() {
   const g = game();
-  const missing = active.initialOrder.filter(id => !g.heard.includes(id));
+  const missing = musicIds(active).filter(id => !g.heard.includes(id));
   if (missing.length && !confirmReveal) {
     confirmReveal = true;
     $('notice').textContent = 'You haven’t heard excerpt ' + missing.map(id => letter(active, id)).join(', ') + ' yet. Reveal anyway?';
@@ -515,7 +569,7 @@ function reveal() {
   const r = scoreOrder(g.order, correct);
   if (!extras.results[active.id]) {
     extras.results[active.id] = {
-      pairs: r.pairs, exact: r.exact, at: Date.now(), day: dayOf(active),
+      pairs: r.pairs, exact: r.exact, total: r.total, n: correct.length, at: Date.now(), day: dayOf(active),
       squares: correct.map(id => square(verdictFor(g, correct, id).diff)).join(''),
     };
   }
@@ -539,8 +593,9 @@ function shareText(withScore) {
   const title = 'Musical Flashbacks ' + (day ? '#' + day : '· ' + modeName(d.mode) + ' set') + ' 🎼';
   const lines = [title];
   if (day) lines.push(modeName(d.mode) === 'Mixed' ? 'Beethoven & Brahms' : composerOf(d.mode.composerId).name);
-  if (withScore && r) lines.push(r.squares, r.pairs + '/15 · ' + r.exact + '/6 exact', 'Can you beat me?');
-  else lines.push('I thought you might enjoy this one 🎧 Six short excerpts to listen to and put in the order they were written. No pressure, just for fun!');
+  const m = musicIds(d).length, k = d.initialOrder.length - m;
+  if (withScore && r) lines.push(r.squares, r.pairs + '/' + (r.total || 15) + ' · ' + r.exact + '/' + (r.n || 6) + ' exact', 'Can you beat me?');
+  else lines.push('I thought you might enjoy this one 🎧 ' + cap(NUMBER_WORDS[m] || m) + ' short excerpts' + (k ? ' and ' + NUMBER_WORDS[k] + ' historical moment' + (k > 1 ? 's' : '') : '') + ' to put in the order they happened. No pressure, just for fun!');
   lines.push(setUrl(d, withScore));
   return lines.join('\n');
 }
@@ -549,7 +604,7 @@ function openShare(withScore) {
   $('share-title').textContent = withScore ? 'Challenge a friend' : 'Send this set';
   $('share-blurb').textContent = withScore
     ? 'Send this exact set. They’ll see your score once they finish — never your order or notes.'
-    : 'Your friend gets the same six excerpts to enjoy at their own pace. No scores are shared — add your name so they know it’s from you.';
+    : 'Your friend gets the same set to enjoy at their own pace. No scores are shared — add your name so they know it’s from you.';
   $('share-name').value = extras.name;
   const refresh = () => { $('share-text').value = shareText(withScore); };
   $('share-name').oninput = () => { extras.name = $('share-name').value.slice(0, 24); persist(); refresh(); };
@@ -568,20 +623,118 @@ function openShare(withScore) {
 function openStats() {
   const rs = Object.values(extras.results);
   const played = rs.length;
-  const avg = played ? (rs.reduce((n, r) => n + r.pairs, 0) / played).toFixed(1) : '–';
-  const perfect = rs.filter(r => r.pairs === 15).length;
+  const pct = r => r.pairs / (r.total || 15);
+  const avg = played ? Math.round(rs.reduce((n, r) => n + pct(r), 0) / played * 100) + '%' : '–';
+  const perfect = rs.filter(r => pct(r) === 1).length;
   const days = new Set(rs.filter(r => r.day).map(r => r.day));
   const today = todayNumber();
   let cur = 0; for (let n = days.has(today) ? today : today - 1; days.has(n); n--) cur++;
   let best = 0, run = 0; [...days].sort((a, b) => a - b).forEach((n, i, a) => { run = i && a[i - 1] === n - 1 ? run + 1 : 1; best = Math.max(best, run); });
-  const buckets = [['15', r => r.pairs === 15], ['13–14', r => r.pairs >= 13 && r.pairs < 15], ['10–12', r => r.pairs >= 10 && r.pairs < 13], ['7–9', r => r.pairs >= 7 && r.pairs < 10], ['0–6', r => r.pairs < 7]];
+  const buckets = [['100%', r => pct(r) === 1], ['85–99%', r => pct(r) >= 0.85 && pct(r) < 1], ['66–84%', r => pct(r) >= 0.66 && pct(r) < 0.85], ['46–65%', r => pct(r) >= 0.46 && pct(r) < 0.66], ['0–45%', r => pct(r) < 0.46]];
   const counts = buckets.map(([, f]) => rs.filter(f).length), max = Math.max(1, ...counts);
   $('stats-body').innerHTML =
-    '<div class="stat-grid"><div><b>' + played + '</b><span>Sets played</span></div><div><b>' + avg + '</b><span>Avg pairs</span></div>' +
+    '<div class="stat-grid"><div><b>' + played + '</b><span>Sets played</span></div><div><b>' + avg + '</b><span>Avg score</span></div>' +
     '<div><b>' + cur + '</b><span>Daily streak</span></div><div><b>' + best + '</b><span>Best streak</span></div></div>' +
     '<p class="sub">' + perfect + ' perfect set' + (perfect === 1 ? '' : 's') + ' · first-try scores only</p>' +
     '<div class="dist">' + buckets.map(([l], i) => '<div><span>' + l + '</span><i style="width:' + (counts[i] / max * 75) + '%"></i>' + counts[i] + '</div>').join('') + '</div>';
   $('stats').showModal();
+}
+
+/* ---------- set builder ---------- */
+const cap = s => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+const ENSEMBLES = [['chamber', 'Chamber music'], ['piano', 'Solo piano'], ['orchestral', 'Orchestral']];
+const DEFAULT_BUILD = { ensembles: ['orchestral'], composers: ['beethoven', 'brahms'], size: 6, moments: true };
+let draft = null;
+const libWorks = () => libCatalog.works.filter(w => w.kind !== 'event');
+const libEvents = () => libCatalog.works.filter(w => w.kind === 'event');
+const excerptFor = w => libCatalog.excerpts.find(e => e.workId === w.id);
+function builderPool(cfg) {
+  return libWorks().filter(w => cfg.ensembles.includes(w.ensemble) && cfg.composers.includes(w.composerId) && excerptFor(w));
+}
+function showView(v) {
+  $('builder').hidden = v !== 'builder';
+  $('game-view').hidden = v === 'builder';
+  if (v === 'builder') ['tab-daily', 'tab-practice', 'tab-build'].forEach(t => $(t).setAttribute('aria-pressed', String(t === 'tab-build')));
+}
+function openBuilder() {
+  stop();
+  draft = JSON.parse(JSON.stringify(extras.builder || DEFAULT_BUILD));
+  showView('builder');
+  renderBuilder();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function chip(group, value, label, on) {
+  return '<button class="chip" data-group="' + group + '" data-value="' + value + '" aria-pressed="' + on + '">' + esc(label) + '</button>';
+}
+function renderBuilder() {
+  const pool = builderPool(draft), years = new Set(pool.map(w => w.year)).size;
+  const ok = years >= draft.size;
+  const momentsN = draft.size >= 10 ? 2 : 1;
+  $('b-ensembles').innerHTML = ENSEMBLES.map(([v, l]) => chip('ensembles', v, l, draft.ensembles.includes(v))).join('');
+  $('b-composers').innerHTML = libCatalog.composers.map(c => chip('composers', c.id, c.name, draft.composers.includes(c.id))).join('');
+  $('b-size').innerHTML = [6, 10].map(n => chip('size', n, n + ' works', draft.size === n)).join('');
+  $('b-moments').innerHTML = chip('moments', 'on', draft.moments ? 'On — add ' + momentsN + ' historical moment' + (momentsN > 1 ? 's' : '') : 'Off', draft.moments);
+  $('b-status').className = 'b-status' + (ok ? '' : ' warn');
+  $('b-status').textContent = !draft.ensembles.length || !draft.composers.length
+    ? 'Pick at least one type of music and one composer.'
+    : ok ? pool.length + ' works to choose from, across ' + years + ' different years. Each set uses ' + draft.size + ' works from different years.'
+      : 'Only ' + years + ' different year' + (years === 1 ? '' : 's') + ' available — a ' + draft.size + '-work set needs ' + draft.size + '. Try adding a composer or a type of music' + (draft.size === 10 ? ', or choose 6 works' : '') + '.';
+  $('b-create').disabled = !ok || !draft.ensembles.length || !draft.composers.length;
+  document.querySelectorAll('#builder .chip').forEach(b => b.onclick = () => {
+    const g = b.dataset.group, v = b.dataset.value;
+    if (g === 'size') draft.size = Number(v);
+    else if (g === 'moments') draft.moments = !draft.moments;
+    else draft[g] = draft[g].includes(v) ? draft[g].filter(x => x !== v) : [...draft[g], v];
+    renderBuilder();
+  });
+}
+function shuffled(a) { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function buildDefinition(cfg) {
+  const pool = builderPool(cfg), fam = state.familiarity;
+  // Round-robin across composers (then ensembles) so a set feels varied; never two works from one year.
+  const groups = shuffled(cfg.composers).map(c => shuffled(pool.filter(w => w.composerId === c))
+    .sort((a, b) => (fam[a.id]?.heard ? 1 : 0) - (fam[b.id]?.heard ? 1 : 0))).filter(g => g.length);
+  const chosen = [], years = new Set();
+  for (let round = 0; chosen.length < cfg.size && groups.some(g => g.length); round++) {
+    for (const g of groups) {
+      if (chosen.length >= cfg.size) break;
+      const used = new Set(chosen.map(w => w.ensemble));
+      let idx = g.findIndex(w => !years.has(w.year) && !used.has(w.ensemble));
+      if (idx < 0) idx = g.findIndex(w => !years.has(w.year));
+      if (idx < 0) { g.length = 0; continue; }
+      const [w] = g.splice(idx, 1); chosen.push(w); years.add(w.year);
+    }
+  }
+  if (chosen.length < cfg.size) throw Error('Not enough different years for this set.');
+  const items = [...chosen];
+  if (cfg.moments) {
+    const want = cfg.size >= 10 ? 2 : 1, ys = chosen.map(w => w.year), lo = Math.min(...ys), hi = Math.max(...ys);
+    for (const pad of [3, 10, 30]) {
+      const cands = shuffled(libEvents().filter(ev => !years.has(ev.year) && ev.year >= lo - pad && ev.year <= hi + pad));
+      const picked = items.filter(x => x.kind === 'event');
+      for (const ev of cands) {
+        if (picked.length >= want) break;
+        if (picked.some(p => p.year === ev.year)) continue;
+        if (picked.length && picked[0].region === ev.region && cands.some(c => c.region !== picked[0].region && !years.has(c.year))) continue;
+        picked.push(ev); items.push(ev); years.add(ev.year);
+      }
+      if (picked.length >= want) break;
+    }
+  }
+  const ex = items.map(excerptFor);
+  const correct = [...items].sort((a, b) => a.year - b.year).map(w => excerptFor(w).id);
+  let order, tries = 0;
+  do { order = shuffled(ex.map(e => e.id)); } while (scoreOrder(order, correct).pairs > totalPairs(order.length) * 0.6 && ++tries < 50);
+  return {
+    id: crypto.randomUUID(), catalogVersion: libCatalog.version, mode: { kind: 'custom' }, createdAt: Date.now(),
+    excerpts: ex.map(({ id, version }) => ({ id, version })), initialOrder: order,
+  };
+}
+function buildAndPlay(cfg) {
+  try {
+    extras.builder = JSON.parse(JSON.stringify(cfg));
+    select(buildDefinition(cfg), { scroll: true });
+  } catch (err) { $('b-status').textContent = err.message; $('b-status').className = 'b-status warn'; }
 }
 
 /* ---------- navigation ---------- */
@@ -599,6 +752,10 @@ $('saved').onchange = () => select(state.definitions.find(d => d.id === $('saved
 $('new').onclick = newPractice;
 $('tab-daily').onclick = goDaily;
 $('tab-practice').onclick = goPractice;
+$('tab-build').onclick = openBuilder;
+$('b-create').onclick = () => buildAndPlay(draft);
+$('c-change').onclick = openBuilder;
+$('c-again').onclick = () => extras.builder ? buildAndPlay(extras.builder) : openBuilder();
 $('reveal').onclick = reveal;
 $('send-set').onclick = () => openShare(false);
 $('retry').onclick = () => { stop(); save({ ...freshGame(active.initialOrder), heard: game().heard }); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
@@ -625,7 +782,7 @@ document.addEventListener('keydown', e => { if (e.key === ' ' && e.target === do
       const score = q.get('score') === null || q.get('score') === '' ? NaN : Number(q.get('score'));
       extras.challenges[target.id] = {
         from: (q.get('from') || '').slice(0, 24),
-        score: Number.isInteger(score) && score >= 0 && score <= 15 ? score : null,
+        score: Number.isInteger(score) && score >= 0 && score <= 91 ? score : null,
       };
     }
   } catch (err) {
@@ -633,9 +790,13 @@ document.addEventListener('keydown', e => { if (e.key === ' ' && e.target === do
     target = null;
   }
   if (q.toString()) history.replaceState(null, '', location.pathname);
+  // Reopen an unfinished custom set rather than jumping to the Daily puzzle.
+  const last = state.definitions.find(d => d.id === state.latest.current);
+  if (!target && last && last.mode.kind === 'custom' && !state.attempts[last.id].submitted) target = last;
   if (!target && extras.home === 'orchestral') {
     target = [...state.definitions].reverse().find(d => d.mode.kind === 'orchestral' && !state.attempts[d.id].submitted) || orchestralDefinition();
   }
   select(target || dailyDefinition(today));
-  if (firstVisit) $('help').showModal();
+  if (q.get('mode') === 'build') openBuilder();
+  else if (firstVisit) $('help').showModal();
 })();

@@ -1,6 +1,6 @@
 # Set Builder — Proposed Work List
 
-_Draft for review · 21 November 2026_
+_Agreed 21 November 2026 — all works (ticked and unticked) are now in the Set Builder library. Exception: Dvořák String Quartet No. 11 has no Apple recording available in Japan, so it is left out for now._
 
 **How to review:** `[x]` = proposed, `[ ]` = optional extra (off unless you tick it). Strike out, untick or add anything — then tell me (or edit this file) and I'll research the final list.
 

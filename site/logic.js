@@ -294,7 +294,7 @@ function validateDefinition(raw, catalogs) {
         !d.id ||
         !Number.isFinite(d.createdAt) ||
         !d.mode ||
-        !['composer', 'mixed', 'orchestral'].includes(d.mode.kind) ||
+        !['composer', 'mixed', 'orchestral', 'custom'].includes(d.mode.kind) ||
         !Array.isArray(d.excerpts))
         throw Error('Invalid set definition.');
     const mode = d.mode;
@@ -305,12 +305,13 @@ function validateDefinition(raw, catalogs) {
         !c.composers.some((x) => x.id === mode.composerId))
         throw Error('Unknown composer.');
     const es = resolveExcerpts(c, d);
-    if (es.length !== 6 ||
-        new Set(es.map((e) => e.workId)).size !== 6 ||
+    const n = es.length;
+    if (n < 4 || n > 14 ||
+        new Set(es.map((e) => e.workId)).size !== n ||
         new Set(es.map((e) => c.works.find((w) => w.id === e.workId).year))
-            .size !== 6 ||
+            .size !== n ||
         !validOrder(d.initialOrder, es.map((e) => e.id)))
-        throw Error('This set needs six distinct works, years, and excerpt labels.');
+        throw Error('This set needs distinct works, years, and excerpt labels.');
     if (mode.kind === 'composer' &&
         es.some((e) => c.works.find((w) => w.id === e.workId).composerId !== mode.composerId))
         throw Error('The composer does not match the excerpts.');
@@ -331,7 +332,7 @@ function encodeSet(d) {
     const json = JSON.stringify([
         1,
         d.catalogVersion,
-        d.mode.kind === 'mixed' ? '*' : d.mode.kind === 'orchestral' ? '~' : d.mode.composerId,
+        d.mode.kind === 'mixed' ? '*' : d.mode.kind === 'orchestral' ? '~' : d.mode.kind === 'custom' ? '+' : d.mode.composerId,
         d.excerpts.map((e) => [e.id, e.version]),
         d.initialOrder.map((id) => d.excerpts.findIndex((e) => e.id === id)),
     ]);
@@ -350,10 +351,10 @@ function decodeSet(token, catalogs, id = crypto.randomUUID(), now = Date.now()) 
         const [, catalogVersion, mode, refs, order] = values;
         if (typeof mode !== 'string' ||
             !Array.isArray(refs) ||
-            refs.length !== 6 ||
+            refs.length < 4 || refs.length > 14 ||
             !Array.isArray(order) ||
-            order.length !== 6 ||
-            !order.every((n) => Number.isInteger(n) && n >= 0 && n < 6) ||
+            order.length !== refs.length ||
+            !order.every((n) => Number.isInteger(n) && n >= 0 && n < refs.length) ||
             !refs.every((r) => Array.isArray(r) &&
                 r.length === 2 &&
                 typeof r[0] === 'string' &&
@@ -367,6 +368,8 @@ function decodeSet(token, catalogs, id = crypto.randomUUID(), now = Date.now()) 
                 ? { kind: 'mixed' }
                 : mode === '~'
                     ? { kind: 'orchestral' }
+                    : mode === '+'
+                    ? { kind: 'custom' }
                     : { kind: 'composer', composerId: mode },
             excerpts: refs.map(([id, version]) => ({ id, version })),
             initialOrder: order.map((i) => refs[i][0]),

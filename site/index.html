@@ -11,7 +11,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#111d27">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23111d27'/><text x='50' y='70' font-size='62' text-anchor='middle' fill='%23e5c382' font-family='Georgia'>♪</text></svg>">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 <main>
@@ -20,11 +20,25 @@
     <nav aria-label="Game mode">
       <button class="tab" id="tab-daily" aria-pressed="true">Daily</button>
       <button class="tab" id="tab-practice" aria-pressed="false">Practice</button>
+      <button class="tab" id="tab-build" aria-pressed="false">Build a set</button>
       <button class="icon" id="open-stats" aria-label="Your stats">Stats</button>
       <button class="icon" id="open-help" aria-label="How to play">?</button>
     </nav>
   </header>
 
+  <section id="builder" hidden aria-labelledby="b-title">
+    <div class="eyebrow">Set builder</div>
+    <h1 id="b-title">Build your<em>own set.</em></h1>
+    <p>Choose the music you’d like, and we’ll pick a set of works from different years — ready to play or send to a friend.</p>
+    <div class="b-group"><h2>Type of music</h2><div class="chips" id="b-ensembles"></div></div>
+    <div class="b-group"><h2>Composers</h2><div class="chips" id="b-composers"></div></div>
+    <div class="b-group"><h2>Number of works</h2><div class="chips" id="b-size"></div></div>
+    <div class="b-group"><h2>Historical moments</h2><p class="sub">Famous events from Japanese and European history, to place on the same timeline.</p><div class="chips" id="b-moments"></div></div>
+    <p id="b-status" class="b-status" role="status"></p>
+    <button class="primary" id="b-create">Create my set</button>
+  </section>
+
+  <div id="game-view">
   <div id="challenge" class="banner" hidden></div>
 
   <section id="intro-block">
@@ -43,6 +57,11 @@
     <button id="new">New set +</button>
   </div>
 
+  <div class="toolbar" id="custom-bar" hidden>
+    <button id="c-change">← Change settings</button>
+    <button id="c-again">New set, same settings</button>
+  </div>
+
   <div id="progress" class="progress" aria-live="polite"></div>
 
   <section id="scorecard" class="scorecard" hidden tabindex="-1" aria-live="polite"></section>
@@ -57,10 +76,11 @@
   </div>
 
   <p id="apple-credit" class="credits" hidden>Previews courtesy of Apple Music.</p>
+  </div>
   <p id="notice" role="status"></p>
 
   <footer>
-    Beethoven &amp; Brahms · 36 works · Recordings streamed from Wikimedia Commons under their original licences (credits appear after each reveal).
+    Beethoven, Schubert, Mendelssohn, Schumann, Brahms &amp; Dvořák · Recordings from Apple Music previews and Wikimedia Commons (credits appear after each reveal).
     Progress is saved in this browser only.
   </footer>
 </main>
@@ -68,13 +88,13 @@
 <dialog id="help">
   <h2>How to play</h2>
   <ol>
-    <li><b>Listen</b> to six 25-second excerpts. No titles — just the music.</li>
+    <li><b>Listen</b> to the 25-second excerpts. No titles — just the music.</li>
     <li><b>Drag</b> them (or use ↑ ↓) into the order you think they were <i>composed</i>, earliest at the top.</li>
     <li><b>Reveal</b> to see the real timeline and the story behind each piece.</li>
   </ol>
-  <p><b>Scoring.</b> Every pair of excerpts you put in the right relative order earns a point — 15 pairs in all. A random guess averages 7.5.</p>
-  <p><b>Daily</b> is the same puzzle for everyone, so you can compare with friends. <b>Practice</b> gives you unlimited sets for Beethoven, Brahms, or a mix of both.</p>
-  <details><summary>What counts as “earlier”?</summary><p>The year the work was completed — not when it was recorded, published or arranged. Every set has six different years. Single-composer sets take two works from each of the early, middle and late career; mixed sets take one from each period for both composers.</p></details>
+  <p><b>Scoring.</b> Every pair of cards you put in the right relative order earns a point — 15 pairs in a set of six. A random guess gets about half.</p>
+  <p><b>Daily</b> is the same puzzle for everyone. <b>Practice</b> gives you unlimited Beethoven and Brahms sets. <b>Build a set</b> lets you choose composers and types of music — and add historical moments to place on the timeline too.</p>
+  <details><summary>What counts as “earlier”?</summary><p>The year the work was completed — not when it was recorded, published or arranged. No two cards in a set share a year. Single-composer sets take two works from each of the early, middle and late career; mixed sets take one from each period for both composers.</p></details>
   <form method="dialog"><button class="primary">Got it</button></form>
 </dialog>
 
@@ -96,9 +116,10 @@
   </div>
 </dialog>
 
-<script src="catalog.js"></script>
-<script src="catalog-orchestral.js"></script>
-<script src="logic.js"></script>
-<script src="app.js"></script>
+<script src="catalog.js?v=5"></script>
+<script src="catalog-orchestral.js?v=5"></script>
+<script src="catalog-library.js?v=5"></script>
+<script src="logic.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

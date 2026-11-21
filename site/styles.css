@@ -130,3 +130,22 @@ dialog input{width:100%}
 .compare .cmp-h{font:600 13px system-ui,sans-serif;fill:var(--ink)}
 .compare .cmp-l{font:600 14px Georgia,serif;fill:var(--ink)}
 .compare .sub{text-align:center;margin-top:4px}
+
+/* set builder */
+#builder h1{margin-bottom:10px}
+.b-group{margin:22px 0}
+.b-group h2{font:600 15px system-ui,sans-serif;color:var(--ink);margin:0 0 10px}
+.b-group .sub{margin:-4px 0 10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border-radius:999px;padding:10px 16px;min-height:44px}
+.chip[aria-pressed="true"]{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:600}
+.b-status{font-size:14px;color:var(--soft);margin:18px 0 14px;min-height:1.4em}
+.b-status.warn{color:#f2a283}
+/* historical moment cards */
+.card.event{background:#1f2a2a;border-style:dashed}
+.card.result.event{border-style:solid}
+.event-badge{border-style:dashed;color:var(--ink)}
+.kicker{font-size:11px!important;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold)!important;margin:0 0 2px!important}
+.ja{font-family:"Hiragino Mincho ProN","Yu Mincho",serif;color:var(--soft)}
+.desc .ja{font-size:15px;margin-top:4px}
+.story.ja{font-size:15px;margin-top:-4px}
