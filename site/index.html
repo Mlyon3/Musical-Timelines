@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Musical Flashbacks</title>
+<meta name="description" content="Listen to six anonymous excerpts and put them in the order they were composed. A new puzzle every day.">
+<meta property="og:title" content="Musical Flashbacks">
+<meta property="og:description" content="Six listens. One lifetime. Can you put a composer's works in order by ear?">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#111d27">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23111d27'/><text x='50' y='70' font-size='62' text-anchor='middle' fill='%23e5c382' font-family='Georgia'>♪</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">musical <em>flashbacks</em><small>LISTEN · PLACE · DISCOVER</small></div>
+    <nav aria-label="Game mode">
+      <button class="tab" id="tab-daily" aria-pressed="true">Daily</button>
+      <button class="tab" id="tab-practice" aria-pressed="false">Practice</button>
+      <button class="icon" id="open-stats" aria-label="Your stats">Stats</button>
+      <button class="icon" id="open-help" aria-label="How to play">?</button>
+    </nav>
+  </header>
+
+  <div id="challenge" class="banner" hidden></div>
+
+  <section id="intro-block">
+    <div class="eyebrow" id="composer"></div>
+    <h1 id="headline">A lifetime,<em>in six listens.</em></h1>
+    <p id="intro"></p>
+  </section>
+
+  <div class="toolbar" id="practice-bar" hidden>
+    <label>Composer
+      <select id="mode"></select>
+    </label>
+    <label>Your sets
+      <select id="saved"></select>
+    </label>
+    <button id="new">New set +</button>
+  </div>
+
+  <div id="progress" class="progress" aria-live="polite"></div>
+
+  <section id="scorecard" class="scorecard" hidden tabindex="-1" aria-live="polite"></section>
+
+  <ol id="cards" class="cards" aria-label="Your timeline, earliest at the top"></ol>
+
+  <div class="footer-actions">
+    <button class="primary" id="reveal">Reveal the timeline</button>
+    <button id="send-set">Send this set to a friend</button>
+    <button id="retry" hidden>Try this set again</button>
+    <button id="another" hidden>Play a practice set</button>
+  </div>
+
+  <p id="apple-credit" class="credits" hidden>Previews courtesy of Apple Music.</p>
+  <p id="notice" role="status"></p>
+
+  <footer>
+    Beethoven &amp; Brahms · 36 works · Recordings streamed from Wikimedia Commons under their original licences (credits appear after each reveal).
+    Progress is saved in this browser only.
+  </footer>
+</main>
+
+<dialog id="help">
+  <h2>How to play</h2>
+  <ol>
+    <li><b>Listen</b> to six 25-second excerpts. No titles — just the music.</li>
+    <li><b>Drag</b> them (or use ↑ ↓) into the order you think they were <i>composed</i>, earliest at the top.</li>
+    <li><b>Reveal</b> to see the real timeline and the story behind each piece.</li>
+  </ol>
+  <p><b>Scoring.</b> Every pair of excerpts you put in the right relative order earns a point — 15 pairs in all. A random guess averages 7.5.</p>
+  <p><b>Daily</b> is the same puzzle for everyone, so you can compare with friends. <b>Practice</b> gives you unlimited sets for Beethoven, Brahms, or a mix of both.</p>
+  <details><summary>What counts as “earlier”?</summary><p>The year the work was completed — not when it was recorded, published or arranged. Every set has six different years. Single-composer sets take two works from each of the early, middle and late career; mixed sets take one from each period for both composers.</p></details>
+  <form method="dialog"><button class="primary">Got it</button></form>
+</dialog>
+
+<dialog id="stats">
+  <h2>Your stats</h2>
+  <div id="stats-body"></div>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+
+<dialog id="share-dlg">
+  <h2 id="share-title">Challenge a friend</h2>
+  <p id="share-blurb">Send this exact set. They'll see your score once they finish — never your order or notes.</p>
+  <label>Your name (optional)<input id="share-name" maxlength="24" placeholder="e.g. Sam" autocomplete="nickname"></label>
+  <textarea id="share-text" readonly rows="6"></textarea>
+  <div class="row">
+    <button class="primary" id="share-go">Share</button>
+    <button id="share-copy">Copy</button>
+    <form method="dialog"><button>Close</button></form>
+  </div>
+</dialog>
+
+<script src="catalog.js"></script>
+<script src="catalog-orchestral.js"></script>
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
