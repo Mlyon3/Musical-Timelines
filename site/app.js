@@ -586,7 +586,7 @@ function setUrl(d, withScore) {
   const day = dayOf(d); if (day) p.set('day', String(day));
   const name = extras.name.trim(); if (name) p.set('from', name);
   const r = extras.results[d.id]; if (withScore && r) p.set('score', String(r.pairs));
-  return location.origin + location.pathname + '?' + p.toString();
+  return location.origin + '/?' + p.toString();
 }
 function shareText(withScore) {
   const d = active, day = dayOf(d), r = extras.results[d.id];
@@ -651,7 +651,11 @@ const excerptFor = w => libCatalog.excerpts.find(e => e.workId === w.id);
 function builderPool(cfg) {
   return libWorks().filter(w => cfg.ensembles.includes(w.ensemble) && cfg.composers.includes(w.composerId) && excerptFor(w));
 }
+const BUILD_PATH = /^\/build\/?$/;
 function showView(v) {
+  // Keep the address bar in step with the view, so reloading (or reopening the tab) lands back here.
+  const path = v === 'builder' ? '/build' : '/';
+  if (location.pathname !== path && (v === 'builder' || BUILD_PATH.test(location.pathname))) history.replaceState(null, '', path);
   $('builder').hidden = v !== 'builder';
   $('game-view').hidden = v === 'builder';
   if (v === 'builder') ['tab-daily', 'tab-practice', 'tab-build'].forEach(t => $(t).setAttribute('aria-pressed', String(t === 'tab-build')));
@@ -768,6 +772,7 @@ document.addEventListener('keydown', e => { if (e.key === ' ' && e.target === do
 /* ---------- boot ---------- */
 (function boot() {
   const q = new URLSearchParams(location.search);
+  const wantsBuilder = q.get('mode') === 'build' || BUILD_PATH.test(location.pathname);
   const today = todayNumber();
   let target = null;
   if (q.get('mode') === 'orchestral') extras.home = 'orchestral';
@@ -797,6 +802,6 @@ document.addEventListener('keydown', e => { if (e.key === ' ' && e.target === do
     target = [...state.definitions].reverse().find(d => d.mode.kind === 'orchestral' && !state.attempts[d.id].submitted) || orchestralDefinition();
   }
   select(target || dailyDefinition(today));
-  if (q.get('mode') === 'build') openBuilder();
+  if (wantsBuilder) openBuilder();
   else if (firstVisit) $('help').showModal();
 })();

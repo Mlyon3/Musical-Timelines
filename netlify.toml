@@ -1,2 +1,13 @@
 [build]
   publish = "site"
+
+# The set builder has its own address; it serves the same page.
+[[redirects]]
+  from = "/build"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/build/"
+  to = "/index.html"
+  status = 200
